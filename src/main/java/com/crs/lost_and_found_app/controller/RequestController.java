@@ -116,6 +116,28 @@ public class RequestController {
         return ResponseEntity.ok(requests);
     }
 
+    @DeleteMapping("/{requestId}")
+    @PreAuthorize("hasAnyRole('USER', 'STAFF', 'ADMIN')")
+    public ResponseEntity<?> deleteRequest(@PathVariable Long requestId) {
+        try {
+            requestService.deleteRequest(requestId);
+            logger.info("Request with ID {} successfully deleted", requestId);
+            return ResponseEntity.ok("Request deleted successfully");
+        } catch (EntityNotFoundException e) {
+            logger.warn("Failed to delete request with ID {}: {}", requestId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (IllegalStateException e) {
+            logger.warn("Cannot delete request with ID {}: {}", requestId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (SecurityException e) {
+            logger.warn("Unauthorized attempt to delete request with ID {}: {}", requestId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error deleting request with ID {}: {}", requestId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred while deleting the request.");
+        }
+    }
+
     // Note: Deleting requests might not be a standard user feature.
     // If needed, it should likely be restricted to ADMINs and handle cascading effects.
     // For now, no DELETE endpoint for Requests is implemented based on common flows.

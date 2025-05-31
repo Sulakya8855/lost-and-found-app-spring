@@ -206,4 +206,33 @@ public class RequestService {
                 .updatedAt(request.getUpdatedAt())
                 .build();
     }
-} 
+
+    @Transactional
+    public void deleteRequest(Long requestId) {
+        User currentUser = getCurrentAuthenticatedUser();
+        Request request = requestRepository.findById(requestId)
+                .orElseThrow(() -> {
+                    logger.warn("Request not found with ID: {} for delete attempt by User ID: {}", requestId, currentUser.getId());
+                    return new EntityNotFoundException("Request not found with ID: " + requestId);
+                });
+
+        // Check if the user is the requester or an admin/staff
+        if (!request.getRequester().getId().equals(currentUser.getId()) && !isAdminOrStaff(currentUser)) {
+            logger.warn("User ID: {} attempted to delete request ID: {} owned by User ID: {}. Unauthorized.",
+                    currentUser.getId(), requestId, request.getRequester().getId());
+            throw new SecurityException("You are not authorized to delete this request.");
+        }
+
+        // Prevent deletion of approved requests where the item is already claimed, as this could lead to inconsistencies.
+        // Other statuses (PENDING, REJECTED, CANCELLED) should be deletable.
+        if (request.getStatus() == RequestStatus.APPROVED && request.getItem().getStatus() == ItemStatus.CLAIMED) {
+            logger.warn("Attempt to delete an APPROVED request (ID: {}) where the item (ID: {}) is already CLAIMED. User ID: {}. Operation denied.",
+                    requestId, request.getItem().getId(), currentUser.getId());
+            throw new IllegalStateException("Cannot delete a request that has been approved and the item claimed. Please reject or cancel if necessary.");
+        }
+
+        requestRepository.delete(request);
+        logger.info("Request with ID: {} successfully deleted by User ID: {}. Request was made by User ID: {}",
+                requestId, currentUser.getId(), request.getRequester().getId());
+    }
+}
